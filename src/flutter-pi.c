@@ -51,6 +51,7 @@
 #include "pluginregistry.h"
 #include "plugins/raw_keyboard.h"
 #include "plugins/text_input.h"
+#include "plugins/texture_rgba_renderer_plugin.h"
 #include "texture_registry.h"
 #include "tracer.h"
 #include "user_input.h"
@@ -1108,6 +1109,10 @@ on_gl_external_texture_frame_callback(void *userdata, int64_t texture_id, size_t
 
     flutterpi = userdata;
 
+    if (rgba_renderer_texture_callback(userdata, texture_id, width, height, texture_out)) {
+        return true;
+    }
+
     return texture_registry_gl_external_texture_frame_callback(flutterpi->texture_registry, texture_id, width, height, texture_out);
 }
 #endif
@@ -1415,6 +1420,8 @@ static int flutterpi_run(struct flutterpi *flutterpi) {
     }
 
     flutterpi->flutter.engine = engine;
+
+    texture_rgba_renderer_plugin_init(engine, &flutterpi->flutter.procs);
 
     engine_result = procs->RunInitialized(engine);
     if (engine_result != kSuccess) {

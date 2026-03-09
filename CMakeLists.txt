@@ -401,9 +401,15 @@ endif()
 message(STATUS "Sentry plugin .......... ${BUILD_SENTRY_PLUGIN}")
 message(STATUS "Bundle crashpad_handler  ${HAVE_BUNDLED_CRASHPAD_HANDLER}")
 
+# Texture Rgba Renderer Plugin
+target_sources(flutterpi_module PRIVATE src/plugins/texture_rgba_renderer_plugin.c)
+
 # Needed so dart VM can actually resolve symbols in the same
 # executable. (For dart:ffi DynamicLibrary.executable / DynamicLibrary.process)
 target_link_options(flutterpi_module PUBLIC -rdynamic)
+
+# 保留 FlutterRgbaRendererPluginOnRgba 符号，防止它被 LTO 优化掉
+target_link_options(flutterpi_module PUBLIC "-Wl,-u,FlutterRgbaRendererPluginOnRgba")
 
 # Define VULKAN_DEBUG if it was set to On, or if it was set to AUTO and we're using debug mode.
 if (VULKAN_DEBUG MATCHES AUTO)

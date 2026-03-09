@@ -1,3 +1,6 @@
+## 关于本Fork
+这是为了能在 flutter-pi 环境下使用 [texture_rgba_renderer](https://pub.dev/packages/texture_rgba_renderer) 的修改版本，目的是为了能以纹理渲染模式运行 [flutter_ffmpeg_sw_player](https://github.com/debuggerx01/flutter_ffmpeg_sw_player)
+
 ## 📰 NEWS
 - Added a (not complete) sentry plugin, see: https://github.com/ardera/flutter-pi/wiki/Sentry-Support
 - There's now flutterpi tool to make building the app easier: https://pub.dev/packages/flutterpi_tool
