@@ -17,6 +17,11 @@
     #define GL_RGBA8_OES 0x8058
 #endif
 
+
+#ifndef GL_BGRA_EXT
+    #define GL_BGRA_EXT 0x80E1
+#endif
+
 // 保存 engine 引用及方法指针表
 static FlutterEngine global_engine = NULL;
 static FlutterEngineProcTable *g_procs = NULL;
@@ -148,7 +153,7 @@ bool rgba_renderer_texture_callback(
     }
 
     if (tex->is_dirty && tex->buffer != NULL) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex->width, tex->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex->buffer);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, tex->width, tex->height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, tex->buffer);
         tex->is_dirty = false;
     }
 
