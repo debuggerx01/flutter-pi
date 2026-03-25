@@ -50,11 +50,20 @@ typedef struct texture_data {
     size_t buffer_size;
     GLuint gl_texture_id;
     bool is_dirty;
+    bool is_allocated;
+    int allocated_width;
+    int allocated_height;
+
     struct texture_data *next;
 } texture_data_t;
 
 static texture_data_t *textures_head = NULL;
 static pthread_mutex_t texture_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+#define MAX_ABANDONED_TEXTURES 64
+static GLuint abandoned_texture_ids[MAX_ABANDONED_TEXTURES];
+static int abandoned_texture_count = 0;
 
 static texture_data_t *find_texture(const int64_t key) {
     texture_data_t *curr = textures_head;
@@ -86,9 +95,14 @@ static bool close_texture(const int64_t key) {
             texture_data_t *to_delete = *curr;
             *curr = to_delete->next;
 
+            // 安全策略：不在此处(Platform线程)直接调用 glDeleteTextures，防止 GPU 驱动死锁崩溃
+            // 将 gl_texture_id 放入废弃队列，交给下一个 Render 帧处理
             if (to_delete->gl_texture_id != 0) {
-                glDeleteTextures(1, &to_delete->gl_texture_id);
+                if (abandoned_texture_count < MAX_ABANDONED_TEXTURES) {
+                    abandoned_texture_ids[abandoned_texture_count++] = to_delete->gl_texture_id;
+                }
             }
+
             if (to_delete->buffer != NULL) {
                 free(to_delete->buffer);
             }
@@ -135,8 +149,17 @@ bool rgba_renderer_texture_callback(
     (void) height;
 
     pthread_mutex_lock(&texture_mutex);
+
+    // 清理废弃的纹理 ID
+    if (abandoned_texture_count > 0) {
+        glDeleteTextures(abandoned_texture_count, abandoned_texture_ids);
+        abandoned_texture_count = 0;
+    }
+
     texture_data_t *tex = find_texture(texture_id);
-    if (tex == NULL) {
+    
+    // 如果纹理未准备好数据，拒绝渲染，防止触发 Mali GPU 缺页异常(MMU Fault)
+    if (tex == NULL || tex->width <= 0 || tex->height <= 0 || tex->buffer == NULL) {
         pthread_mutex_unlock(&texture_mutex);
         return false;
     }
@@ -152,8 +175,17 @@ bool rgba_renderer_texture_callback(
         glBindTexture(GL_TEXTURE_2D, tex->gl_texture_id);
     }
 
-    if (tex->is_dirty && tex->buffer != NULL) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, tex->width, tex->height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, tex->buffer);
+    if (tex->is_dirty) {
+        if (!tex->is_allocated || tex->allocated_width != tex->width || tex->allocated_height != tex->height) {
+            // 尺寸变化或首次分配时，才调用 glTexImage2D 重分配显存
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, tex->width, tex->height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, tex->buffer);
+            tex->is_allocated = true;
+            tex->allocated_width = tex->width;
+            tex->allocated_height = tex->height;
+        } else {
+            // 尺寸不变时，使用 glTexSubImage2D 仅更新像素内容
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tex->width, tex->height, GL_BGRA_EXT, GL_UNSIGNED_BYTE, tex->buffer);
+        }
         tex->is_dirty = false;
     }
 
@@ -231,7 +263,7 @@ static int on_method_call(char *channel, struct platch_obj *object, FlutterPlatf
         }
         return 0;
 
-        // 【新增】处理 Dart 侧请求底层指针的需求
+        // 处理 Dart 侧请求底层指针的需求
     }
     if (strcmp(method_name, "getTexturePtr") == 0) {
         struct std_value *key_val = stdmap_get_str(args, (char *) "key");
